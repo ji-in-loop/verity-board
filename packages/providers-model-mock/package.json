@@ -1,12 +1,25 @@
 {
   "name": "@verity-board/providers-model-mock",
   "version": "0.1.0",
-  "type": "module",
+  "description": "Deterministic, offline model provider for verity-board — the default, used in all automated tests.",
   "license": "MIT",
+  "author": "Balajikumar Murugan",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ji-in-loop/verity-board.git",
+    "directory": "packages/providers-model-mock"
+  },
+  "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

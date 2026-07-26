@@ -1,0 +1,63 @@
+name: Publish to npm
+
+# Publishes every @verity-board/* package to the public npm registry.
+# Triggered by publishing a GitHub Release, or manually via workflow_dispatch. Requires an
+# NPM_TOKEN repository secret (an npm automation token with publish rights for the
+# @verity-board scope) — see docs/PUBLISHING.md.
+#
+# Uses `pnpm publish`, not `npm publish`: packages depend on each other via pnpm's
+# "workspace:*" protocol, which only `pnpm publish` rewrites to the real resolved version in
+# the published tarball. A bare `npm publish` would ship a broken "workspace:*" dependency
+# range to consumers. Verified locally with `pnpm pack` before relying on this in CI.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'npm dist-tag to publish under'
+        required: false
+        default: 'latest'
+
+permissions:
+  contents: read
+  id-token: write # required for npm provenance attestations
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          registry-url: 'https://registry.npmjs.org'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - run: pnpm run test
+
+      # Published in dependency order (leaves first) purely so a failure partway through
+      # leaves a self-consistent state — npm itself doesn't require a package's dependencies
+      # to already be published. Packages version independently, so a release usually only
+      # bumps a few of them; skip any whose current version is already on the registry
+      # rather than assuming every release touches all eleven.
+      - name: Publish packages
+        run: |
+          set -e
+          for pkg in core config model-adapter-shared providers-evidence-local \
+                     providers-model-mock providers-model-anthropic providers-model-openai \
+                     providers-model-gemini orchestrator reporters cli; do
+            dir="packages/$pkg"
+            name=$(node -p "require('./$dir/package.json').name")
+            version=$(node -p "require('./$dir/package.json').version")
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "$name@$version is already published, skipping."
+            else
+              (cd "$dir" && pnpm publish --access public --no-git-checks --provenance --tag "${{ inputs.tag || 'latest' }}")
+            fi
+          done
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

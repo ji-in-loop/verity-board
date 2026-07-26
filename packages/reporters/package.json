@@ -1,12 +1,25 @@
 {
   "name": "@verity-board/reporters",
   "version": "0.1.0",
-  "type": "module",
+  "description": "JSON and Markdown report rendering for verity-board committee recommendations.",
   "license": "MIT",
+  "author": "Balajikumar Murugan",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ji-in-loop/verity-board.git",
+    "directory": "packages/reporters"
+  },
+  "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

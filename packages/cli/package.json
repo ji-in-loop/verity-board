@@ -1,13 +1,26 @@
 {
   "name": "@verity-board/cli",
   "version": "0.1.0",
-  "type": "module",
+  "description": "The verity-board CLI — run an AI-assisted engineering review committee against a local case directory.",
   "license": "MIT",
+  "author": "Balajikumar Murugan",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ji-in-loop/verity-board.git",
+    "directory": "packages/cli"
+  },
+  "type": "module",
   "bin": {
     "verity-board": "./dist/index.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
