@@ -4,6 +4,15 @@ import { FindingSchema } from '../src/schemas/finding.js';
 import { ActorSkillSchema } from '../src/schemas/actor-skill.js';
 import { CommitteeSchema } from '../src/schemas/committee.js';
 import { DecisionPolicySchema } from '../src/schemas/decision-policy.js';
+import { ActorReviewSchema, blockersOf, risksOf } from '../src/schemas/actor-review.js';
+import { HumanApprovalSchema } from '../src/schemas/human-approval.js';
+import { PlaybookSchema } from '../src/schemas/playbook.js';
+import {
+  CommitteeRecommendationSchema,
+  DisagreementSchema,
+  PolicyEvaluationSchema,
+  AuditMetadataSchema,
+} from '../src/schemas/recommendation.js';
 
 describe('EvidenceSchema', () => {
   const valid = {
@@ -129,6 +138,202 @@ describe('DecisionPolicySchema', () => {
         version: 1,
         criticalBlockers: [],
         rules: [],
+      }),
+    ).toThrow();
+  });
+});
+
+function finding(overrides: Record<string, unknown> = {}) {
+  return {
+    actorId: 'sre-reviewer',
+    criterion: 'rollback',
+    status: 'VERIFIED',
+    severity: 'info',
+    explanation: 'ok',
+    confidence: 0.8,
+    isInferred: false,
+    ...overrides,
+  };
+}
+
+describe('ActorReviewSchema', () => {
+  const valid = {
+    actorId: 'sre-reviewer',
+    round: 1 as const,
+    findings: [
+      finding({ severity: 'critical', explanation: 'rollback unverified' }),
+      finding({ severity: 'material', explanation: 'latency regression' }),
+      finding({ severity: 'info', explanation: 'nit' }),
+    ],
+    recommendation: 'NO_GO',
+    confidence: 0.9,
+  };
+
+  it('accepts a well-formed actor review', () => {
+    expect(ActorReviewSchema.parse(valid)).toBeTruthy();
+  });
+
+  it('rejects a round outside 1..2', () => {
+    expect(() => ActorReviewSchema.parse({ ...valid, round: 3 })).toThrow();
+  });
+
+  it('defaults unknowns and clarificationQuestions to empty arrays', () => {
+    const parsed = ActorReviewSchema.parse(valid);
+    expect(parsed.unknowns).toEqual([]);
+    expect(parsed.clarificationQuestions).toEqual([]);
+  });
+
+  it('blockersOf returns only critical findings', () => {
+    const review = ActorReviewSchema.parse(valid);
+    expect(blockersOf(review)).toHaveLength(1);
+    expect(blockersOf(review)[0].explanation).toBe('rollback unverified');
+  });
+
+  it('risksOf returns only material findings', () => {
+    const review = ActorReviewSchema.parse(valid);
+    expect(risksOf(review)).toHaveLength(1);
+    expect(risksOf(review)[0].explanation).toBe('latency regression');
+  });
+});
+
+describe('HumanApprovalSchema', () => {
+  const valid = {
+    reviewCaseId: 'checkout-release-8.4',
+    decidedBy: 'Release Director',
+    decidedAt: '2026-07-25T00:00:00Z',
+    followedRecommendation: true,
+    finalDecision: 'GO',
+  };
+
+  it('accepts a well-formed human approval record', () => {
+    expect(HumanApprovalSchema.parse(valid)).toBeTruthy();
+  });
+
+  it('rejects a missing finalDecision', () => {
+    const { finalDecision: _finalDecision, ...withoutDecision } = valid;
+    expect(() => HumanApprovalSchema.parse(withoutDecision)).toThrow();
+  });
+});
+
+describe('PlaybookSchema', () => {
+  const valid = {
+    id: 'production-readiness-playbook',
+    version: 1,
+    reviewTask: 'Assess whether this release is safe to ship.',
+    applicableCommittees: ['production-readiness'],
+    outcomeVocabulary: ['GO', 'NO_GO', 'CONDITIONAL_GO', 'ESCALATE'],
+    decisionRules: 'See production-readiness-policy.',
+  };
+
+  it('accepts a well-formed playbook and defaults reportFormat to both formats', () => {
+    const parsed = PlaybookSchema.parse(valid);
+    expect(parsed.reportFormat).toEqual(['json', 'markdown']);
+  });
+
+  it('rejects a non-positive version', () => {
+    expect(() => PlaybookSchema.parse({ ...valid, version: 0 })).toThrow();
+  });
+
+  it('rejects an empty applicableCommittees list', () => {
+    expect(() => PlaybookSchema.parse({ ...valid, applicableCommittees: [] })).toThrow();
+  });
+});
+
+describe('recommendation schemas', () => {
+  const evidence = {
+    evidenceId: 'ev-0019',
+    capability: 'testing.performance_results',
+    subject: 'checkout-service',
+    status: 'MISSING' as const,
+    summary: 'Load-testing result was not provided.',
+    facts: {},
+    provenance: { provider: 'local-file', sourceRef: 'n/a', retrievedAt: '2026-07-25T00:00:00Z' },
+    freshness: { isStale: false },
+    classification: 'internal' as const,
+  };
+
+  const policyEvaluation = {
+    policyId: 'production-readiness-policy',
+    ruleFired: '{"expr":"criticalBlockers.count > 0"}',
+    outcome: 'NO_GO',
+    reasoning: 'Rule matched.',
+  };
+
+  const audit = {
+    startedAt: '2026-07-25T00:00:00Z',
+    completedAt: '2026-07-25T00:00:01Z',
+    modelCallCount: 4,
+    stoppingCondition: 'MANDATORY_BLOCKER_FOUND',
+  };
+
+  it('PolicyEvaluationSchema accepts a well-formed evaluation', () => {
+    expect(PolicyEvaluationSchema.parse(policyEvaluation)).toBeTruthy();
+  });
+
+  it('AuditMetadataSchema defaults evidenceFetched to an empty array', () => {
+    expect(AuditMetadataSchema.parse(audit).evidenceFetched).toEqual([]);
+  });
+
+  it('DisagreementSchema accepts differing actor positions keyed by actor id', () => {
+    const disagreement = {
+      criterion: 'rollback',
+      severity: 'critical' as const,
+      actorPositions: { 'sre-reviewer': 'NO_GO', 'product-manager': 'GO' },
+    };
+    expect(DisagreementSchema.parse(disagreement)).toBeTruthy();
+  });
+
+  it('CommitteeRecommendationSchema accepts a full, well-formed recommendation', () => {
+    const actorReview = {
+      actorId: 'sre-reviewer',
+      round: 1 as const,
+      findings: [finding({ severity: 'critical' })],
+      recommendation: 'NO_GO',
+      confidence: 0.9,
+    };
+
+    const recommendation = {
+      committeeId: 'production-readiness',
+      reviewCaseId: 'checkout-release-8.4',
+      reviewCaseTitle: 'Checkout Platform Release 8.4',
+      actorRecommendations: { 'sre-reviewer': actorReview },
+      consolidatedBlockers: [finding({ severity: 'critical' })],
+      consolidatedRisks: [],
+      missingEvidence: [evidence],
+      disagreements: [],
+      requiredActions: ['Correct and rerun rollback validation.'],
+      policyEvaluation,
+      overallRecommendation: 'NO_GO',
+      humanDecisionOwner: 'Release Director',
+      audit,
+    };
+
+    expect(CommitteeRecommendationSchema.parse(recommendation)).toBeTruthy();
+  });
+
+  it('CommitteeRecommendationSchema rejects a missing humanDecisionOwner', () => {
+    const actorReview = {
+      actorId: 'sre-reviewer',
+      round: 1 as const,
+      findings: [],
+      recommendation: 'GO',
+      confidence: 0.9,
+    };
+
+    expect(() =>
+      CommitteeRecommendationSchema.parse({
+        committeeId: 'production-readiness',
+        reviewCaseId: 'checkout-release-8.4',
+        reviewCaseTitle: 'Checkout Platform Release 8.4',
+        actorRecommendations: { 'sre-reviewer': actorReview },
+        consolidatedBlockers: [],
+        consolidatedRisks: [],
+        missingEvidence: [],
+        disagreements: [],
+        requiredActions: [],
+        policyEvaluation,
+        overallRecommendation: 'GO',
+        audit,
       }),
     ).toThrow();
   });

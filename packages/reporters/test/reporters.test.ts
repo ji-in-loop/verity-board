@@ -109,4 +109,66 @@ describe('MarkdownReporter', () => {
   it('never claims organizational authority — always marks itself as a recommendation, not a decision', () => {
     expect(rendered).toMatch(/recommendation, not a decision/i);
   });
+
+  it('omits the material risks, disagreements, and required actions sections when none exist', () => {
+    expect(rendered).not.toContain('## Material risks');
+    expect(rendered).not.toContain('## Disagreements');
+  });
+
+  describe('with material risks and disagreements', () => {
+    const withRisksAndDisagreements: CommitteeRecommendation = {
+      ...recommendation,
+      consolidatedRisks: [
+        {
+          actorId: 'product-manager',
+          criterion: 'rollout-plan',
+          category: 'product.staged_rollout_missing',
+          status: 'MISSING',
+          severity: 'material',
+          explanation: 'No staged rollout plan was provided.',
+          evidenceRefs: [],
+          confidence: 0.7,
+          isInferred: true,
+        },
+      ],
+      disagreements: [
+        {
+          criterion: 'rollback',
+          severity: 'critical',
+          actorPositions: { 'sre-reviewer': 'NO_GO', 'product-manager': 'GO' },
+        },
+      ],
+      actorRecommendations: {
+        ...recommendation.actorRecommendations,
+        'product-manager': {
+          actorId: 'product-manager',
+          round: 1,
+          findings: [],
+          unknowns: [],
+          clarificationQuestions: [],
+          recommendation: 'GO',
+          confidence: 0.6,
+        },
+      },
+      requiredActions: [],
+    };
+
+    const rendered = new MarkdownReporter().render(withRisksAndDisagreements);
+
+    it('lists material risks under their own section', () => {
+      expect(rendered).toContain('## Material risks');
+      expect(rendered).toContain('No staged rollout plan was provided.');
+    });
+
+    it('lists disagreements with each actor\'s position', () => {
+      expect(rendered).toContain('## Disagreements');
+      expect(rendered).toContain('rollback');
+      expect(rendered).toContain('Site Reliability Engineer: NO_GO');
+      expect(rendered).toContain('product-manager: GO');
+    });
+
+    it('omits the required actions section when there are none', () => {
+      expect(rendered).not.toContain('## Required actions');
+    });
+  });
 });

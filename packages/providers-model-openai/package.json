@@ -25,7 +25,7 @@
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:coverage": "vitest run --coverage --coverage.reporter=lcov --coverage.reporter=text-summary"
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "openai": "^6.49.0",
