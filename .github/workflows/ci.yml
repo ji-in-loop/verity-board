@@ -33,3 +33,32 @@ jobs:
       - run: pnpm run typecheck
       - run: pnpm run test
       - run: pnpm run lint
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - run: pnpm run test:coverage
+      # Each package's lcov.info records paths relative to that package's own
+      # root (e.g. "src/index.ts"), which collide across packages once
+      # uploaded together — prefix each with its package path so Codecov sees
+      # e.g. "packages/core/src/index.ts" and can map lines back to the repo.
+      - name: Normalize coverage paths to be repo-root-relative
+        run: |
+          for dir in packages/*/coverage; do
+            pkg="${dir%/coverage}"
+            if [ -f "$dir/lcov.info" ]; then
+              sed -i "s|^SF:|SF:${pkg}/|" "$dir/lcov.info"
+            fi
+          done
+      - uses: codecov/codecov-action@v4
+        with:
+          files: packages/*/coverage/lcov.info
+          fail_ci_if_error: false
