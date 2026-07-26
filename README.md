@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/ji-in-loop/verity-board/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ji-in-loop/verity-board/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/ji-in-loop/verity-board/branch/main/graph/badge.svg)](https://codecov.io/gh/ji-in-loop/verity-board)
+[![Known Vulnerabilities](https://snyk.io/test/github/ji-in-loop/verity-board/badge.svg)](https://snyk.io/test/github/ji-in-loop/verity-board)
 [![License: MIT](https://img.shields.io/github/license/ji-in-loop/verity-board)](LICENSE)
 [![Node.js >=20](https://img.shields.io/badge/node-%3E%3D20-339933?logo=node.js&logoColor=white)](package.json)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](tsconfig.base.json)
