@@ -8,7 +8,10 @@ export interface MockActorOutput {
   confidence: number;
 }
 
-export type MockFixtureFn = (context: ActorContext) => MockActorOutput | Promise<MockActorOutput>;
+export type MockFixtureFn = (
+  context: ActorContext,
+  signal?: AbortSignal,
+) => MockActorOutput | Promise<MockActorOutput>;
 
 /**
  * Deterministic, network-free ModelProvider: a pure function of
@@ -21,7 +24,7 @@ export class MockModelProvider implements ModelProvider {
 
   constructor(private readonly fixtures: Record<string, MockFixtureFn>) {}
 
-  async invokeActor(input: { actor: ActorSkill; context: ActorContext }): Promise<unknown> {
+  async invokeActor(input: { actor: ActorSkill; context: ActorContext }, signal?: AbortSignal): Promise<unknown> {
     const fixture = this.fixtures[input.actor.id];
     if (!fixture) {
       throw new Error(
@@ -29,6 +32,6 @@ export class MockModelProvider implements ModelProvider {
           'Register one explicitly — the mock provider never improvises a response.',
       );
     }
-    return fixture(input.context);
+    return fixture(input.context, signal);
   }
 }

@@ -60,7 +60,6 @@ export function baseCommittee(overrides: Partial<Committee> = {}): Committee {
     actors: { required: ['actor-a', 'actor-b'], conditional: [] },
     execution: {
       mode: 'parallel',
-      maximumReviewRounds: 2,
       maximumClarificationRounds: 1,
       maximumQuestionsPerActor: 3,
       maximumEvidenceRequests: 20,

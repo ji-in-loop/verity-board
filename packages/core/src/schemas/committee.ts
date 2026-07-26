@@ -9,7 +9,11 @@ export type ConditionalActor = z.infer<typeof ConditionalActorSchema>;
 
 export const ExecutionConfigSchema = z.object({
   mode: z.enum(['parallel', 'sequential']).default('parallel'),
-  maximumReviewRounds: z.number().int().positive().default(2),
+  // No maximumReviewRounds field: the orchestrator implements exactly one
+  // fixed flow (round 1 -> at most one clarification round -> round 2 ->
+  // stop, see ADR-0005), never a general N-round loop. A config value that
+  // implied otherwise was removed rather than left to mislead — see
+  // ADR-0009.
   maximumClarificationRounds: z.number().int().min(0).max(1).default(1),
   maximumQuestionsPerActor: z.number().int().nonnegative().default(3),
   maximumEvidenceRequests: z.number().int().nonnegative().default(20),

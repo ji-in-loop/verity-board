@@ -15,7 +15,13 @@ export interface ActorContext {
 
 export interface ModelProvider {
   readonly id: string;
-  invokeActor(input: { actor: ActorSkill; context: ActorContext }): Promise<unknown>;
+  /**
+   * `signal`, when provided, is aborted if the committee's `timeoutMs` is
+   * exceeded. Implementations should pass it through to their underlying
+   * SDK call so a timeout actually cancels in-flight work rather than just
+   * causing the caller to stop waiting for it.
+   */
+  invokeActor(input: { actor: ActorSkill; context: ActorContext }, signal?: AbortSignal): Promise<unknown>;
 }
 
 export interface EvidenceRequest {
@@ -26,7 +32,7 @@ export interface EvidenceRequest {
 
 export interface EvidenceProvider {
   readonly id: string;
-  resolve(request: EvidenceRequest): Promise<Evidence>;
+  resolve(request: EvidenceRequest, signal?: AbortSignal): Promise<Evidence>;
 }
 
 export interface Reporter {

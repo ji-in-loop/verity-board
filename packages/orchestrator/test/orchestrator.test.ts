@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MockModelProvider, type MockFixtureFn } from '@verity-board/providers-model-mock';
-import type { ActorSkill } from '@verity-board/core';
+import type { ActorSkill, Evidence, EvidenceProvider, EvidenceRequest } from '@verity-board/core';
 import { runReview } from '../src/orchestrator.js';
 import { UnknownActorError } from '../src/errors.js';
 import { FakeEvidenceProvider, baseCommittee, basePolicy, baseReviewCase, evidence } from './helpers.js';
@@ -238,7 +238,18 @@ describe('runReview: parallel execution determinism', () => {
     const first = await runReview(input);
     const second = await runReview(input);
 
-    const strip = (r: typeof first) => ({ ...r, audit: { ...r.audit, startedAt: '', completedAt: '' } });
+    // Mask every timestamp that's expected to differ between two real runs
+    // a moment apart — audit start/end, and each MISSING/UNAVAILABLE
+    // evidence record's own retrievedAt (the fake provider stamps a fresh
+    // one on every resolve() call).
+    const strip = (r: typeof first) => ({
+      ...r,
+      audit: { ...r.audit, startedAt: '', completedAt: '' },
+      missingEvidence: r.missingEvidence.map((e) => ({
+        ...e,
+        provenance: { ...e.provenance, retrievedAt: '' },
+      })),
+    });
     expect(strip(first)).toEqual(strip(second));
   });
 });
@@ -284,8 +295,42 @@ describe('runReview: actor output validation', () => {
       modelProvider,
     });
 
-    expect(result.overallRecommendation).toBe('NO_GO');
+    // A platform-integrity failure always forces ESCALATE, independent of
+    // whether the policy's criticalBlockers list happens to include the
+    // category — see ADR-0009 and platform-outcomes.ts.
+    expect(result.overallRecommendation).toBe('ESCALATE');
     expect(result.consolidatedBlockers.some((f) => f.category === 'platform.actor_output_invalid')).toBe(true);
+  });
+
+  it('forces ESCALATE for malformed output even when the policy omits platform.actor_output_invalid from criticalBlockers (the exact production configuration)', async () => {
+    const evidenceProvider = new FakeEvidenceProvider(new Map());
+    const modelProvider = new MockModelProvider({
+      'actor-a': () => ({ findings: [], recommendation: 'GO', confidence: 0.9 }),
+      'actor-b': (() => ({ findings: [], confidence: 2 })) as unknown as MockFixtureFn,
+    });
+
+    // Deliberately mirrors the shipped catalog policy's criticalBlockers
+    // list, which does NOT include 'platform.actor_output_invalid'. Before
+    // ADR-0009's protected-category check, this scenario could reach GO.
+    const productionLikePolicy = basePolicy({
+      criticalBlockers: [
+        'testing.mandatory_suite_failed',
+        'reliability.rollback_unverified',
+        'security.critical_finding',
+        'ownership.production_owner_missing',
+      ],
+    });
+
+    const result = await runReview({
+      reviewCase: baseReviewCase(),
+      committee: baseCommittee(),
+      actors: [actorA, actorB],
+      policy: productionLikePolicy,
+      evidenceProvider,
+      modelProvider,
+    });
+
+    expect(result.overallRecommendation).toBe('ESCALATE');
   });
 });
 
@@ -343,5 +388,90 @@ describe('runReview: conditional actor activation', () => {
       modelProvider,
     });
     expect(withFlag.actorRecommendations['actor-c']).toBeDefined();
+  });
+});
+
+describe('runReview: clarification round evidence merging', () => {
+  /**
+   * Simulates evidence that wasn't ready at the start of the review but
+   * resolves by the time an actor specifically asks about it during
+   * clarification — e.g. a load test that finishes mid-review, or evidence
+   * a human attaches in response to the question. Round-1 collection for
+   * this capability legitimately returns MISSING; a follow-up resolve()
+   * for the same capability returns the real result.
+   */
+  class ResolvesOnSecondAskEvidenceProvider implements EvidenceProvider {
+    readonly id = 'resolves-on-second-ask';
+    private askCounts = new Map<string, number>();
+
+    async resolve(request: EvidenceRequest): Promise<Evidence> {
+      const count = (this.askCounts.get(request.capability) ?? 0) + 1;
+      this.askCounts.set(request.capability, count);
+
+      if (request.capability === 'testing.performance_results') {
+        return count === 1
+          ? evidence({ capability: request.capability, status: 'MISSING', summary: 'not yet available' })
+          : evidence({
+              capability: request.capability,
+              status: 'VERIFIED',
+              summary: 'load test completed after being asked about',
+            });
+      }
+      return evidence({ capability: request.capability, status: 'VERIFIED', summary: 'ok' });
+    }
+  }
+
+  it('merges clarification-round evidence so it changes the final policy outcome and appears in the report', async () => {
+    const actorRequiringLoadTest: ActorSkill = {
+      ...actorA,
+      requiredCapabilities: [...actorA.requiredCapabilities, 'testing.performance_results'],
+    };
+
+    const evidenceProvider = new ResolvesOnSecondAskEvidenceProvider();
+    const modelProvider = new MockModelProvider({
+      'actor-a': (ctx) => {
+        const loadTestEvidence = ctx.evidence.find((e) => e.capability === 'testing.performance_results');
+        const stillMissing = !loadTestEvidence || loadTestEvidence.status === 'MISSING';
+        return {
+          findings: stillMissing
+            ? [
+                {
+                  criterion: 'capacity',
+                  status: 'MISSING',
+                  severity: 'material',
+                  explanation: 'Load test result not yet available.',
+                  confidence: 0.6,
+                  isInferred: true,
+                },
+              ]
+            : [],
+          recommendation: stillMissing ? 'CONDITIONAL_GO' : 'GO',
+          confidence: 0.9,
+          clarificationQuestions:
+            ctx.round === 1 && stillMissing
+              ? [{ questionId: 'q1', actorId: 'actor-a', text: 'Did the load test finish?', targetCapability: 'testing.performance_results' }]
+              : [],
+        };
+      },
+      'actor-b': () => ({ findings: [], recommendation: 'GO', confidence: 0.9 }),
+    });
+
+    const result = await runReview({
+      reviewCase: baseReviewCase(),
+      committee: baseCommittee(),
+      actors: [actorRequiringLoadTest, actorB],
+      policy: basePolicy(),
+      evidenceProvider,
+      modelProvider,
+    });
+
+    // Round 1 alone (material risk from the still-missing load test) would
+    // have produced CONDITIONAL_GO. Clarification resolved it, the round-2
+    // actor saw the merged evidence and dropped the finding, and the merged
+    // evidence itself no longer counts as missing.
+    expect(result.audit.stoppingCondition).toBe('CLARIFICATION_ROUND_COMPLETED');
+    expect(result.overallRecommendation).toBe('GO');
+    expect(result.missingEvidence.some((e) => e.capability === 'testing.performance_results')).toBe(false);
+    expect(result.audit.evidenceFetched).toContain('ev-testing.performance_results');
   });
 });

@@ -33,10 +33,11 @@
 
 ### Integration — `packages/orchestrator`
 
-- **Stopping conditions**: one test per condition — `timeoutMs` exceeded,
-  `maximumReviewRounds` reached, `stopWhenMandatoryBlockerFound` short-
-  circuiting further evidence collection, `stopWhenNoNewEvidence`,
-  `stopWhenAllActorsFinal`.
+- **Stopping conditions**: one test per condition — `timeoutMs` exceeded (and
+  actually cancelled, not just the outer promise rejecting),
+  `maximumEvidenceRequests`/`maximumModelCalls` exceeded,
+  `stopWhenMandatoryBlockerFound` short-circuiting further evidence
+  collection, `stopWhenNoNewEvidence`, `stopWhenAllActorsFinal`.
 - **Parallel execution determinism**: running the same case twice with the
   `MockModelProvider` must produce identical `ActorReview`s and identical
   ordering-independent consolidated output (i.e., parallelism must not
@@ -44,10 +45,22 @@
   timing).
 - **Clarification round**: consolidated, deduplicated questions go out
   exactly once; a second clarification round is refused even if actors
-  "ask" for one.
+  "ask" for one. A dedicated integration test proves clarification-round
+  evidence is actually merged into the canonical evidence set — changing
+  `missingEvidence`, the policy outcome, and the audit trail — not just
+  handed to round-2 actors as disconnected prompt text (see ADR-0010).
 - **Partial/missing evidence**: a case directory missing an expected file
   must produce `MISSING` evidence and a corresponding policy consequence,
-  never a silent pass.
+  never a silent pass. A rejected evidence-provider call (`Promise.allSettled`,
+  not `Promise.all`) must produce structured `UNAVAILABLE` evidence instead
+  of crashing the whole review, and must be treated the same as `MISSING`
+  for policy purposes.
+- **Platform-protected outcomes**: a critical, `platform.*`-category finding
+  (malformed actor output, a failed model call, a policy-evaluation failure)
+  must force `ESCALATE` even when the configured policy's `criticalBlockers`
+  list omits that category — tested against both a test-helper policy and
+  the actual shipped catalog policy, since this exact gap once passed a test
+  that used a helper policy the real config didn't match (see ADR-0009).
 - **Actor isolation**: an `ActorContext` snapshot assertion — no actor's
   context object contains another actor's `ActorReview`, findings, or
   questions before the consolidation step runs.

@@ -11,5 +11,6 @@ export * from './schemas/recommendation.js';
 export * from './schemas/human-approval.js';
 export * from './ports.js';
 export * from './policy/rule-expression.js';
+export * from './policy/platform-outcomes.js';
 export * from './policy/policy-engine.js';
 export * from './consolidation/consolidate.js';

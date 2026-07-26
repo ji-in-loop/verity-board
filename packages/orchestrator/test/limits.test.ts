@@ -90,4 +90,41 @@ describe('runReview: configurable limits', () => {
       }),
     ).rejects.toThrow(ReviewTimeoutError);
   });
+
+  it('actually cancels the in-flight model call on timeout — not only the outer promise', async () => {
+    const evidenceProvider = new FakeEvidenceProvider(new Map());
+    let signalAborted = false;
+    let innerTimer: ReturnType<typeof setTimeout> | undefined;
+    let innerTimerCleared = false;
+
+    const modelProvider = new MockModelProvider({
+      'actor-a': (_ctx, signal) =>
+        new Promise((resolve) => {
+          innerTimer = setTimeout(() => resolve({ findings: [], recommendation: 'GO', confidence: 0.9 }), 200);
+          signal?.addEventListener('abort', () => {
+            signalAborted = true;
+            clearTimeout(innerTimer);
+            innerTimerCleared = true;
+          });
+        }),
+      'actor-b': () => ({ findings: [], recommendation: 'GO', confidence: 0.9 }),
+    });
+
+    await expect(
+      runReview({
+        reviewCase: baseReviewCase(),
+        committee: baseCommittee({ execution: { ...baseCommittee().execution, timeoutMs: 20 } }),
+        actors: [actorA, actorB],
+        policy: basePolicy(),
+        evidenceProvider,
+        modelProvider,
+      }),
+    ).rejects.toThrow(ReviewTimeoutError);
+
+    // The outer promise rejecting is necessary but not sufficient — this is
+    // the assertion that actually distinguishes cancellation from a caller
+    // that simply stopped waiting while the mock's inner timer kept running.
+    expect(signalAborted).toBe(true);
+    expect(innerTimerCleared).toBe(true);
+  });
 });

@@ -5,6 +5,7 @@ import {
   type ClarificationQuestion,
   type ClarificationResponse,
   type Committee,
+  type Evidence,
   type EvidenceProvider,
   type ReviewCase,
 } from '@verity-board/core';
@@ -34,6 +35,15 @@ export function consolidateQuestions(
 
 export interface ClarificationResolution {
   responses: ClarificationResponse[];
+  /**
+   * Newly resolved Evidence for each question that named a
+   * `targetCapability` and got something other than MISSING back — the
+   * caller merges this into the review's canonical evidence set (see
+   * mergeEvidence in evidence-plan.ts) so it actually affects missing-
+   * evidence accounting, the policy evaluation, and the audit trail, not
+   * just the round-2 prompt text.
+   */
+  evidence: Evidence[];
   gainedNewEvidence: boolean;
 }
 
@@ -41,26 +51,38 @@ export async function resolveClarificationResponses(
   questions: ClarificationQuestion[],
   reviewCase: ReviewCase,
   evidenceProvider: EvidenceProvider,
+  signal?: AbortSignal,
 ): Promise<ClarificationResolution> {
-  let gainedNewEvidence = false;
-
-  const responses = await Promise.all(
-    questions.map(async (question): Promise<ClarificationResponse> => {
+  const resolved = await Promise.all(
+    questions.map(async (question): Promise<{ response: ClarificationResponse; evidence?: Evidence }> => {
       if (!question.targetCapability) {
-        return { questionId: question.questionId, text: NO_ADDITIONAL_EVIDENCE_TEXT };
+        return { response: { questionId: question.questionId, text: NO_ADDITIONAL_EVIDENCE_TEXT } };
       }
-      const evidence = await evidenceProvider.resolve({
-        capability: question.targetCapability,
-        subject: reviewCase.application.id,
-        reviewCase,
-      });
-      if (evidence.status === 'MISSING') {
-        return { questionId: question.questionId, text: NO_ADDITIONAL_EVIDENCE_TEXT };
+
+      let evidence: Evidence;
+      try {
+        evidence = await evidenceProvider.resolve(
+          { capability: question.targetCapability, subject: reviewCase.application.id, reviewCase },
+          signal,
+        );
+      } catch {
+        // A provider failure during clarification is treated the same as
+        // "nothing new" for this question — it must not crash the review.
+        return { response: { questionId: question.questionId, text: NO_ADDITIONAL_EVIDENCE_TEXT } };
       }
-      gainedNewEvidence = true;
-      return { questionId: question.questionId, text: evidence.summary };
+
+      if (evidence.status === 'MISSING' || evidence.status === 'UNAVAILABLE') {
+        return { response: { questionId: question.questionId, text: NO_ADDITIONAL_EVIDENCE_TEXT } };
+      }
+      return { response: { questionId: question.questionId, text: evidence.summary }, evidence };
     }),
   );
 
-  return { responses, gainedNewEvidence };
+  const evidence = resolved.flatMap((r) => (r.evidence ? [r.evidence] : []));
+
+  return {
+    responses: resolved.map((r) => r.response),
+    evidence,
+    gainedNewEvidence: evidence.length > 0,
+  };
 }

@@ -28,17 +28,20 @@ export class AnthropicModelProvider implements ModelProvider {
     this.maxTokens = options.maxTokens ?? 4096;
   }
 
-  async invokeActor(input: { actor: ActorSkill; context: ActorContext }): Promise<unknown> {
+  async invokeActor(input: { actor: ActorSkill; context: ActorContext }, signal?: AbortSignal): Promise<unknown> {
     const { actor, context } = input;
 
-    const response = await this.client.messages.create({
-      model: this.model,
-      max_tokens: this.maxTokens,
-      system: buildSystemPrompt(actor),
-      messages: [{ role: 'user', content: buildUserMessage(context) }],
-      tools: [reviewTool],
-      tool_choice: { type: 'tool', name: REVIEW_TOOL_NAME },
-    });
+    const response = await this.client.messages.create(
+      {
+        model: this.model,
+        max_tokens: this.maxTokens,
+        system: buildSystemPrompt(actor),
+        messages: [{ role: 'user', content: buildUserMessage(context) }],
+        tools: [reviewTool],
+        tool_choice: { type: 'tool', name: REVIEW_TOOL_NAME },
+      },
+      { signal },
+    );
 
     if (response.stop_reason === 'refusal') {
       return { findings: [], recommendation: 'ESCALATE', confidence: 0 };

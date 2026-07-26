@@ -5,6 +5,7 @@ import {
   type ActorSkill,
   type ClarificationResponse,
   type Evidence,
+  type Finding,
   type ModelProvider,
   type ReviewCase,
 } from '@verity-board/core';
@@ -26,10 +27,6 @@ export function buildActorContext(
     priorClarificationResponses,
   };
 }
-
-/** Invoked when the model's raw output fails schema validation — treated as a
- * blocking gap, never silently dropped or fabricated into a passing review. */
-const INVALID_OUTPUT_CATEGORY = 'platform.actor_output_invalid';
 
 /**
  * A model shouldn't have to redundantly echo which actor it is into every
@@ -58,12 +55,66 @@ function normalizeRawOutput(raw: unknown, actor: ActorSkill): Record<string, unk
   return { ...output, findings, clarificationQuestions };
 }
 
+/**
+ * A synthetic review carrying a single critical, protected-category finding.
+ * Used whenever this actor's contribution to the review could not be
+ * trusted — malformed output or a failed model call — so the gap is a
+ * visible, policy-forcing finding rather than a crashed review or a
+ * silently dropped actor. Every category here is checked by the policy
+ * engine before any configured rule — see platform-outcomes.ts / ADR-0009.
+ */
+function platformFailureReview(
+  actor: ActorSkill,
+  round: 1 | 2,
+  category: string,
+  explanation: string,
+): ActorReview {
+  const finding: Finding = {
+    actorId: actor.id,
+    criterion: 'actor_output_validation',
+    category,
+    status: 'MISSING',
+    severity: 'critical',
+    explanation,
+    evidenceRefs: [],
+    confidence: 0,
+    isInferred: false,
+  };
+
+  return {
+    actorId: actor.id,
+    actorDisplayName: actor.displayName,
+    round,
+    findings: [finding],
+    unknowns: [],
+    clarificationQuestions: [],
+    recommendation: 'ESCALATE',
+    confidence: 0,
+  };
+}
+
 export async function invokeActorReview(
   actor: ActorSkill,
   context: ActorContext,
   modelProvider: ModelProvider,
+  signal?: AbortSignal,
 ): Promise<ActorReview> {
-  const raw = await modelProvider.invokeActor({ actor, context });
+  let raw: unknown;
+  try {
+    raw = await modelProvider.invokeActor({ actor, context }, signal);
+  } catch (cause) {
+    // A network error, rate limit, or other model-call failure must not
+    // crash the whole review (which would waste every other actor's work
+    // and every evidence fetch) — it becomes this actor's contribution:
+    // a critical, protected-category finding that forces ESCALATE.
+    return platformFailureReview(
+      actor,
+      context.round,
+      'platform.model_call_failed',
+      `${actor.displayName}'s model call failed and was treated as a blocking gap rather than crashing the review: ${String(cause)}`,
+    );
+  }
+
   const candidate = {
     actorId: actor.id,
     actorDisplayName: actor.displayName,
@@ -77,26 +128,10 @@ export async function invokeActorReview(
   const parsed = ActorReviewSchema.safeParse(candidate);
   if (parsed.success) return parsed.data;
 
-  return {
-    actorId: actor.id,
-    actorDisplayName: actor.displayName,
-    round: context.round,
-    findings: [
-      {
-        actorId: actor.id,
-        criterion: 'actor_output_validation',
-        category: INVALID_OUTPUT_CATEGORY,
-        status: 'MISSING',
-        severity: 'critical',
-        explanation: `${actor.displayName}'s response failed output validation and was rejected rather than trusted: ${parsed.error.message}`,
-        evidenceRefs: [],
-        confidence: 0,
-        isInferred: false,
-      },
-    ],
-    unknowns: [],
-    clarificationQuestions: [],
-    recommendation: 'ESCALATE',
-    confidence: 0,
-  };
+  return platformFailureReview(
+    actor,
+    context.round,
+    'platform.actor_output_invalid',
+    `${actor.displayName}'s response failed output validation and was rejected rather than trusted: ${parsed.error.message}`,
+  );
 }

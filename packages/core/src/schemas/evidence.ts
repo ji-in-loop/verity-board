@@ -7,6 +7,14 @@ export const EvidenceStatusSchema = z.enum([
   'STALE',
   'NOT_APPLICABLE',
   'INFERRED',
+  /**
+   * Distinct from MISSING: a source was declared for this capability but
+   * resolving it failed (provider exception, network error, malformed
+   * response) rather than nothing being supplied at all. Treated the same
+   * as MISSING for policy purposes — see policy-engine.ts — but kept
+   * distinguishable in reports/audits for diagnosability.
+   */
+  'UNAVAILABLE',
 ]);
 export type EvidenceStatus = z.infer<typeof EvidenceStatusSchema>;
 

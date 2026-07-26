@@ -105,7 +105,10 @@ type ActivationCondition =
 
 interface ExecutionConfig {
   mode: "parallel" | "sequential";  // sequential reserved, unused in v0.1
-  maximumReviewRounds: number;
+  // No maximumReviewRounds: the orchestrator is a fixed round1 -> at most
+  // one clarification round -> round2 -> stop flow (ADR-0005), not a
+  // general N-round loop — a config value implying otherwise was removed
+  // rather than left to mislead. See ADR-0009.
   maximumClarificationRounds: number; // hard ceiling: 1 in v0.1
   maximumQuestionsPerActor: number;
   maximumEvidenceRequests: number;

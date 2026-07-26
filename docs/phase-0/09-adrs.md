@@ -159,3 +159,83 @@ overhead across the author's projects.
 
 **Consequence**: None of note — this is a low-risk, easily-revisited
 choice if the author's preference differs for this specific project.
+
+## ADR-0009: Platform-integrity failures are protected outcomes, not business policy
+
+**Status**: Accepted (2026-07-26, following external code review)
+
+**Context**: A malformed actor response was already turned into a critical
+finding with category `platform.actor_output_invalid` (see
+`actor-invocation.ts`). But the policy engine only ever counted a critical
+finding toward `criticalBlockers.count` if its category appeared in the
+configured `DecisionPolicy.criticalBlockers` list — and the shipped
+`catalog/policies/production-readiness-policy.yaml` never listed
+`platform.actor_output_invalid`. A test proved the intended behavior (NO_GO)
+only because the *test helper* policy in `orchestrator/test/helpers.ts`
+included that category and the real catalog policy did not — classic
+test-fixture drift. The practical consequence: a malformed model response,
+in the actual shipped configuration, could reach `GO` in a case where no
+other finding existed. This directly contradicted the platform's own stated
+principle that missing/invalid information must never be silently treated
+as passing.
+
+**Decision**: A fixed, non-configurable list of platform-integrity
+categories (`platform-outcomes.ts`: `platform.actor_output_invalid`,
+`platform.model_call_failed`, `platform.required_actor_missing`,
+`platform.evidence_provider_failed`, `platform.policy_evaluation_failed`)
+is checked by the policy engine *before* any configured rule. A
+critical-severity finding in one of these categories always forces
+`ESCALATE`, regardless of what the organization's policy YAML says —
+organizations cannot opt out of this by omitting the category from
+`criticalBlockers`. `ESCALATE` (route to a human) rather than `NO_GO` was
+chosen because it doesn't imply the automated system reached a business
+conclusion at all — it didn't; the platform itself failed to produce a
+trustworthy input. A failed model call (network error, rate limit) is now
+also caught and converted into a `platform.model_call_failed` finding
+rather than crashing the whole review via an unguarded `Promise.all`, and a
+policy-evaluation exception (e.g. a malformed rule expression) is caught
+and converted the same way rather than crashing the review.
+
+**Consequence**: `evaluatePolicy` is no longer purely "apply the configured
+policy" — it has one hardcoded safety check ahead of the configured rules.
+This is a deliberate, narrow exception to "policy is fully organization-
+configurable," justified because these categories represent the platform
+failing to do its job, not a business judgment an organization should be
+able to tune. Tested against both a test-helper policy and the actual
+shipped catalog policy, specifically because a test-helper-only guarantee
+is exactly what caused the original gap.
+
+## ADR-0010: Clarification-round evidence is merged into the canonical evidence set
+
+**Status**: Accepted (2026-07-26, following external code review)
+
+**Context**: `resolveClarificationResponses` fetched real `Evidence` for
+each clarification question but discarded everything except a text
+summary, which was handed to round-2 actors as disconnected prompt
+context. The orchestrator's `evidenceFetched` array — the input to
+`missingEvidence`, the policy engine's `mandatoryEvidence.missing` fact,
+and the audit trail — was built once from round-1 evidence and never
+updated. The practical consequence: the clarification round could ask a
+question, get a real answer, and that answer would have zero effect on
+`missingEvidence`, the computed policy outcome, or the audit record — only
+on what the round-2 actor happened to say about it in its own findings.
+The clarification round's entire purpose (closing evidence gaps that
+affect the recommendation) was only partially realized.
+
+**Decision**: `ClarificationResolution` now returns the resolved `Evidence`
+records alongside the text responses. The orchestrator merges them into
+`evidenceFetched` (`mergeEvidence` in `evidence-plan.ts`, keyed by
+capability+subject — a new resolution supersedes a prior MISSING/
+UNAVAILABLE record for the same key, and a genuinely new capability is
+appended) *before* building round-2 `ActorContext`s. `missingEvidence`, the
+policy engine's facts, and `audit.evidenceFetched` are all computed from
+this merged set, not the round-1-only set.
+
+**Consequence**: Clarification evidence can now change the final policy
+outcome and is traceable in the audit trail — verified by an integration
+test that constructs a scenario where round-1-only evidence would produce
+`CONDITIONAL_GO` and the merged, clarification-resolved evidence produces
+`GO`. A provider failure during clarification resolution is treated the
+same as "no new evidence" for that question rather than crashing the
+review, consistent with ADR-0009's general stance on platform-level
+failures.

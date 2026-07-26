@@ -42,27 +42,30 @@ export class OpenAiModelProvider implements ModelProvider {
     this.model = options.model ?? process.env.VERITY_BOARD_OPENAI_MODEL ?? DEFAULT_MODEL;
   }
 
-  async invokeActor(input: { actor: ActorSkill; context: ActorContext }): Promise<unknown> {
+  async invokeActor(input: { actor: ActorSkill; context: ActorContext }, signal?: AbortSignal): Promise<unknown> {
     const { actor, context } = input;
 
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages: [
-        { role: 'system', content: buildSystemPrompt(actor) },
-        { role: 'user', content: buildUserMessage(context) },
-      ],
-      tools: [
-        {
-          type: 'function',
-          function: {
-            name: REVIEW_TOOL_NAME,
-            description: REVIEW_TOOL_DESCRIPTION,
-            parameters: reviewInputSchema,
+    const response = await this.client.chat.completions.create(
+      {
+        model: this.model,
+        messages: [
+          { role: 'system', content: buildSystemPrompt(actor) },
+          { role: 'user', content: buildUserMessage(context) },
+        ],
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: REVIEW_TOOL_NAME,
+              description: REVIEW_TOOL_DESCRIPTION,
+              parameters: reviewInputSchema,
+            },
           },
-        },
-      ],
-      tool_choice: { type: 'function', function: { name: REVIEW_TOOL_NAME } },
-    });
+        ],
+        tool_choice: { type: 'function', function: { name: REVIEW_TOOL_NAME } },
+      },
+      { signal },
+    );
 
     return parseChatCompletionToolCall(response);
   }

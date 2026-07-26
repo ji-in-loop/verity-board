@@ -9,10 +9,11 @@ import {
   type Evidence,
   type EvidenceProvider,
   type ModelProvider,
+  type PolicyEvaluation,
   type ReviewCase,
 } from '@verity-board/core';
 import { resolveActivatedActors } from './activation.js';
-import { buildEvidencePlan, collectEvidence } from './evidence-plan.js';
+import { buildEvidencePlan, collectEvidence, mergeEvidence } from './evidence-plan.js';
 import { buildActorContext, invokeActorReview } from './actor-invocation.js';
 import { consolidateQuestions, resolveClarificationResponses } from './clarification.js';
 import {
@@ -38,7 +39,28 @@ function hasMandatoryBlocker(reviews: ActorReview[], policy: DecisionPolicy): bo
   );
 }
 
-async function runReviewInner(input: RunReviewInput): Promise<CommitteeRecommendation> {
+/**
+ * A malformed policy (e.g. a rule expression that fails to parse) must not
+ * crash the review — it's a platform/configuration failure, not a business
+ * outcome, so it forces ESCALATE the same way an invalid actor response
+ * does. See ADR-0009.
+ */
+function evaluatePolicySafely(input: Parameters<typeof evaluatePolicy>[0]): PolicyEvaluation {
+  try {
+    return evaluatePolicy(input);
+  } catch (cause) {
+    return {
+      policyId: input.policy.id,
+      ruleFired: '__platform_protected_escalation__',
+      outcome: 'ESCALATE',
+      reasoning:
+        `Policy evaluation failed (category platform.policy_evaluation_failed) and was treated as a ` +
+        `blocking gap rather than crashing the review: ${String(cause)}`,
+    };
+  }
+}
+
+async function runReviewInner(input: RunReviewInput, signal: AbortSignal): Promise<CommitteeRecommendation> {
   const startedAt = new Date().toISOString();
   const { reviewCase, committee, policy, evidenceProvider, modelProvider } = input;
 
@@ -51,8 +73,9 @@ async function runReviewInner(input: RunReviewInput): Promise<CommitteeRecommend
     reviewCase,
     evidenceProvider,
     committee.execution.maximumEvidenceRequests,
+    signal,
   );
-  const evidenceFetched = [...roundOneEvidence];
+  let evidenceFetched = [...roundOneEvidence];
 
   let modelCallCount = 0;
   const maxModelCalls = committee.execution.maximumModelCalls;
@@ -69,7 +92,7 @@ async function runReviewInner(input: RunReviewInput): Promise<CommitteeRecommend
     activatedActors.map(async (actor) => {
       checkModelCallLimit();
       const context = buildActorContext(actor, reviewCase, roundOneEvidence, 1);
-      return invokeActorReview(actor, context, modelProvider);
+      return invokeActorReview(actor, context, modelProvider, signal);
     }),
   );
 
@@ -96,20 +119,24 @@ async function runReviewInner(input: RunReviewInput): Promise<CommitteeRecommend
         );
       }
 
-      const { responses, gainedNewEvidence } = await resolveClarificationResponses(
-        consolidatedQuestions,
-        reviewCase,
-        evidenceProvider,
-      );
+      const { responses, evidence: clarificationEvidence, gainedNewEvidence } =
+        await resolveClarificationResponses(consolidatedQuestions, reviewCase, evidenceProvider, signal);
 
       if (committee.execution.stopWhenNoNewEvidence && !gainedNewEvidence) {
         stoppingCondition = 'NO_NEW_EVIDENCE';
       } else {
+        // The clarification round's whole purpose is to close evidence
+        // gaps that affect the recommendation — merge what it found into
+        // the canonical evidence set *before* round 2 runs, so round-2
+        // actors see it, missing-evidence accounting reflects it, and the
+        // policy engine evaluates against it. See ADR-0010.
+        evidenceFetched = mergeEvidence(evidenceFetched, clarificationEvidence);
+
         const roundTwoReviews = await Promise.all(
           activatedActors.map(async (actor) => {
             checkModelCallLimit();
-            const context = buildActorContext(actor, reviewCase, roundOneEvidence, 2, responses);
-            return invokeActorReview(actor, context, modelProvider);
+            const context = buildActorContext(actor, reviewCase, evidenceFetched, 2, responses);
+            return invokeActorReview(actor, context, modelProvider, signal);
           }),
         );
         finalReviews = roundTwoReviews;
@@ -122,12 +149,14 @@ async function runReviewInner(input: RunReviewInput): Promise<CommitteeRecommend
   const findings = finalReviews.flatMap((review) => review.findings);
   const consolidatedBlockers = findings.filter((f) => f.severity === 'critical');
   const consolidatedRisks = findings.filter((f) => f.severity === 'material');
-  const missingEvidence = evidenceFetched.filter((e: Evidence) => e.status === 'MISSING');
+  const missingEvidence = evidenceFetched.filter(
+    (e: Evidence) => e.status === 'MISSING' || e.status === 'UNAVAILABLE',
+  );
   const requiredActions = findings
     .filter((f) => f.requiredAction)
     .map((f) => f.requiredAction as string);
 
-  const policyEvaluation = evaluatePolicy({
+  const policyEvaluation = evaluatePolicySafely({
     policy,
     actorReviews: finalReviews,
     evidence: evidenceFetched,
@@ -162,18 +191,26 @@ async function runReviewInner(input: RunReviewInput): Promise<CommitteeRecommend
 
 export async function runReview(input: RunReviewInput): Promise<CommitteeRecommendation> {
   const timeoutMs = input.committee.execution.timeoutMs;
-  if (timeoutMs === undefined) return runReviewInner(input);
+  const controller = new AbortController();
+
+  if (timeoutMs === undefined) {
+    return runReviewInner(input, controller.signal);
+  }
 
   let timer: ReturnType<typeof setTimeout>;
   const timeout = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(
-      () => reject(new ReviewTimeoutError(`Review exceeded the committee's timeoutMs of ${timeoutMs}.`)),
-      timeoutMs,
-    );
+    timer = setTimeout(() => {
+      const error = new ReviewTimeoutError(`Review exceeded the committee's timeoutMs of ${timeoutMs}.`);
+      // Actually cancel in-flight model/evidence calls, not just stop
+      // waiting for them — providers that honor the signal (all bundled
+      // ones do) stop consuming tokens/resources immediately.
+      controller.abort(error);
+      reject(error);
+    }, timeoutMs);
   });
 
   try {
-    return await Promise.race([runReviewInner(input), timeout]);
+    return await Promise.race([runReviewInner(input, controller.signal), timeout]);
   } finally {
     clearTimeout(timer!);
   }

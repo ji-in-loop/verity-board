@@ -31,13 +31,14 @@ export class GeminiModelProvider implements ModelProvider {
     this.model = options.model ?? process.env.VERITY_BOARD_GEMINI_MODEL ?? DEFAULT_MODEL;
   }
 
-  async invokeActor(input: { actor: ActorSkill; context: ActorContext }): Promise<unknown> {
+  async invokeActor(input: { actor: ActorSkill; context: ActorContext }, signal?: AbortSignal): Promise<unknown> {
     const { actor, context } = input;
 
     const response = await this.client.models.generateContent({
       model: this.model,
       contents: buildUserMessage(context),
       config: {
+        abortSignal: signal,
         systemInstruction: buildSystemPrompt(actor),
         toolConfig: {
           functionCallingConfig: {

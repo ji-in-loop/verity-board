@@ -144,6 +144,28 @@ describe('evaluatePolicy', () => {
     expect(result.ruleFired).toBe('__no_rule_matched__');
   });
 
+  it('treats UNAVAILABLE evidence (a provider failure) the same as MISSING — never a silent pass', () => {
+    const result = evaluatePolicy({
+      policy,
+      actorReviews: [],
+      evidence: [
+        {
+          evidenceId: 'ev-1',
+          capability: 'deployment.rollback_validation',
+          subject: 'checkout-service',
+          status: 'UNAVAILABLE',
+          summary: 'evidence provider threw while resolving this capability',
+          facts: {},
+          provenance: { provider: 'local-file', sourceRef: 'n/a', retrievedAt: new Date().toISOString() },
+          freshness: { isStale: false },
+          classification: 'internal',
+        },
+      ],
+      disagreements: [],
+    });
+    expect(result.outcome).not.toBe('GO');
+  });
+
   it('ignores a critical finding without a category in the policy criticalBlockers list', () => {
     const result = evaluatePolicy({
       policy,
@@ -154,5 +176,80 @@ describe('evaluatePolicy', () => {
       disagreements: [],
     });
     expect(result.outcome).toBe('GO');
+  });
+
+  describe('platform-protected categories (see platform-outcomes.ts / ADR-0009)', () => {
+    it('forces ESCALATE for a platform.actor_output_invalid finding even though it is absent from criticalBlockers, and even when every other fact would otherwise produce GO', () => {
+      // This mirrors the exact production configuration: the shipped
+      // catalog policy's criticalBlockers list does NOT include
+      // 'platform.actor_output_invalid'. Before this fix, that meant a
+      // malformed actor response could reach GO. It must not.
+      expect(policy.criticalBlockers).not.toContain('platform.actor_output_invalid');
+
+      const result = evaluatePolicy({
+        policy,
+        actorReviews: [
+          review({ findings: [finding({ severity: 'critical', category: 'platform.actor_output_invalid' })] }),
+        ],
+        evidence: [],
+        disagreements: [],
+      });
+
+      expect(result.outcome).toBe('ESCALATE');
+      expect(result.ruleFired).toBe('__platform_protected_escalation__');
+    });
+
+    it('forces ESCALATE for every protected category, regardless of the configured policy', () => {
+      const protectedCategories = [
+        'platform.actor_output_invalid',
+        'platform.model_call_failed',
+        'platform.required_actor_missing',
+        'platform.evidence_provider_failed',
+        'platform.policy_evaluation_failed',
+      ];
+
+      for (const category of protectedCategories) {
+        const result = evaluatePolicy({
+          policy,
+          actorReviews: [review({ findings: [finding({ severity: 'critical', category })] })],
+          evidence: [],
+          disagreements: [],
+        });
+        expect(result.outcome, `category ${category} should force ESCALATE`).toBe('ESCALATE');
+      }
+    });
+
+    it('does not force ESCALATE for a platform-prefixed category at non-critical severity', () => {
+      const result = evaluatePolicy({
+        policy,
+        actorReviews: [
+          review({ findings: [finding({ severity: 'material', category: 'platform.actor_output_invalid' })] }),
+        ],
+        evidence: [],
+        disagreements: [],
+      });
+      expect(result.outcome).toBe('CONDITIONAL_GO');
+    });
+
+    it('takes priority over a configured rule that would otherwise return NO_GO', () => {
+      const result = evaluatePolicy({
+        policy,
+        actorReviews: [
+          review({
+            findings: [
+              finding({ severity: 'critical', category: 'reliability.rollback_unverified' }),
+              finding({ severity: 'critical', category: 'platform.model_call_failed' }),
+            ],
+          }),
+        ],
+        evidence: [],
+        disagreements: [],
+      });
+      // Both a real business blocker and a platform failure are present;
+      // ESCALATE (routing to a human) is the safer outcome than an
+      // automated NO_GO when the platform itself couldn't be trusted.
+      expect(result.outcome).toBe('ESCALATE');
+      expect(result.ruleFired).toBe('__platform_protected_escalation__');
+    });
   });
 });

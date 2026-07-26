@@ -175,11 +175,20 @@ pnpm -r --filter='./packages/*' run test
 pnpm lint
 ```
 
-72 tests across 11 packages, zero network calls, zero live model calls by
+85 tests across 11 packages, zero network calls, zero live model calls by
 default. Each real-model adapter also ships one contract test gated behind
 `VERITY_BOARD_LIVE_MODEL_TESTS=1` (skipped otherwise) that hits its vendor's
 live API — run it yourself with the relevant API key set to verify a new
 adapter end-to-end.
+
+**Platform-integrity guarantees, verified by test:** a timeout actually
+cancels the in-flight model/evidence call (not just the outer promise); one
+evidence provider failing doesn't crash the whole review; and a critical,
+platform-category failure (malformed actor output, a failed model call, a
+policy-evaluation error) always forces `ESCALATE`, independent of whatever
+the configured policy's `criticalBlockers` list says — see
+[ADR-0009](docs/phase-0/09-adrs.md#adr-0009) and
+[ADR-0010](docs/phase-0/09-adrs.md#adr-0010).
 
 ## Documentation
 

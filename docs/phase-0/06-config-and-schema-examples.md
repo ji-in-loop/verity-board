@@ -71,7 +71,6 @@ actors:
 
 execution:
   mode: parallel
-  maximumReviewRounds: 2
   maximumClarificationRounds: 1
   maximumQuestionsPerActor: 3
   maximumEvidenceRequests: 20

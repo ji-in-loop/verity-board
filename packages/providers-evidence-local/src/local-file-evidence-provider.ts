@@ -49,7 +49,13 @@ export class LocalFileEvidenceProvider implements EvidenceProvider {
     return readFileSync(resolved, 'utf-8');
   }
 
-  async resolve(request: EvidenceRequest): Promise<Evidence> {
+  async resolve(request: EvidenceRequest, signal?: AbortSignal): Promise<Evidence> {
+    // File reads here are synchronous, so there's no in-flight work to
+    // cancel mid-call — but an already-aborted signal (a timeout that fired
+    // while this request was queued) should still short-circuit rather than
+    // do the read and throw the result away.
+    signal?.throwIfAborted();
+
     const matches = this.entries.filter((entry) => entry.capability === request.capability);
     const entry =
       matches.find((candidate) => candidate.subject === request.subject) ?? matches[0];
