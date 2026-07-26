@@ -1,14 +1,19 @@
 name: Publish to npm
 
-# Publishes every @verity-board/* package to the public npm registry.
-# Triggered by publishing a GitHub Release, or manually via workflow_dispatch. Requires an
-# NPM_TOKEN repository secret (an npm automation token with publish rights for the
-# @verity-board scope) — see docs/PUBLISHING.md.
+# Publishes every @verity-board/* package to the public npm registry using npm Trusted
+# Publishing (OIDC) — no NPM_TOKEN secret. Requires each package to already exist on npm and
+# have a Trusted Publisher configured on its npmjs.com settings page (owner: ji-in-loop,
+# repository: verity-board, workflow filename: publish.yml). See docs/PUBLISHING.md — the
+# very first publish of each package must happen from a maintainer's own machine, since npm
+# has no way to register a Trusted Publisher for a package that doesn't exist yet.
 #
-# Uses `pnpm publish`, not `npm publish`: packages depend on each other via pnpm's
-# "workspace:*" protocol, which only `pnpm publish` rewrites to the real resolved version in
-# the published tarball. A bare `npm publish` would ship a broken "workspace:*" dependency
-# range to consumers. Verified locally with `pnpm pack` before relying on this in CI.
+# Publishing itself is a two-step combo, not a plain `npm publish` or `pnpm publish`:
+#   1. `pnpm pack` — packages depend on each other via pnpm's "workspace:*" protocol, and only
+#      pnpm rewrites that to the real resolved version in the packed tarball. Verified locally
+#      before relying on this in CI.
+#   2. `npm publish <tarball>` — pnpm's own `publish` command has no Trusted Publishing (OIDC)
+#      support as of pnpm 11.x (checked `pnpm publish --help` directly: no such flag exists).
+#      npm's CLI does, so it publishes the tarball pnpm produced.
 
 on:
   release:
@@ -22,7 +27,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write # required for npm provenance attestations
+  id-token: write # required for npm Trusted Publishing (OIDC) and provenance
 
 jobs:
   publish:
@@ -32,9 +37,11 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.x'
+          node-version: '22.x' # Trusted Publishing requires Node >=22.14.0
           registry-url: 'https://registry.npmjs.org'
           cache: pnpm
+      # Trusted Publishing requires npm CLI >=11.5.1; don't rely on whatever setup-node bundled.
+      - run: npm install -g npm@latest
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
       - run: pnpm run test
@@ -42,11 +49,11 @@ jobs:
       # Published in dependency order (leaves first) purely so a failure partway through
       # leaves a self-consistent state — npm itself doesn't require a package's dependencies
       # to already be published. Packages version independently, so a release usually only
-      # bumps a few of them; skip any whose current version is already on the registry
-      # rather than assuming every release touches all eleven.
+      # bumps a few of them; skip any whose current version is already on the registry.
       - name: Publish packages
         run: |
           set -e
+          mkdir -p /tmp/pnpm-tarballs
           for pkg in core config model-adapter-shared providers-evidence-local \
                      providers-model-mock providers-model-anthropic providers-model-openai \
                      providers-model-gemini orchestrator reporters cli; do
@@ -55,9 +62,8 @@ jobs:
             version=$(node -p "require('./$dir/package.json').version")
             if npm view "$name@$version" version >/dev/null 2>&1; then
               echo "$name@$version is already published, skipping."
-            else
-              (cd "$dir" && pnpm publish --access public --no-git-checks --provenance --tag "${{ inputs.tag || 'latest' }}")
+              continue
             fi
+            tarball=$(cd "$dir" && pnpm pack --pack-destination /tmp/pnpm-tarballs | tail -1)
+            npm publish "$tarball" --access public --provenance --tag "${{ inputs.tag || 'latest' }}"
           done
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
