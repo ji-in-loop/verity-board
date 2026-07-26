@@ -60,5 +60,6 @@ jobs:
           done
       - uses: codecov/codecov-action@v4
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           files: packages/*/coverage/lcov.info
           fail_ci_if_error: false
