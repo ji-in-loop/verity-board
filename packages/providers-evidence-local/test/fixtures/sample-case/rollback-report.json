@@ -1,0 +1,6 @@
+{
+  "attempted": true,
+  "succeeded": false,
+  "failedStep": "db_migration_reversal",
+  "environment": "staging"
+}

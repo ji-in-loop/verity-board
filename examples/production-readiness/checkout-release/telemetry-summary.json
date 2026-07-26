@@ -1,0 +1,10 @@
+{
+  "sloStatus": "within_budget",
+  "errorBudgetRemainingPercent": 62,
+  "checkoutP95LatencyMs": {
+    "baseline": 410,
+    "canary": 540
+  },
+  "alertingConfigured": true,
+  "dashboardsLinked": true
+}

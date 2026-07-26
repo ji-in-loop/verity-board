@@ -1,0 +1,10 @@
+id: broken-actor
+version: 1
+displayName: Broken Actor
+criteria: []
+questionLimits:
+  maximumQuestions: 3
+  maximumEvidenceRequests: 5
+authority:
+  blockerCategories: []
+outputSchema: actor-review.v1

@@ -1,0 +1,33 @@
+{
+  "name": "@verity-board/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "verity-board": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@verity-board/core": "workspace:*",
+    "@verity-board/config": "workspace:*",
+    "@verity-board/orchestrator": "workspace:*",
+    "@verity-board/providers-evidence-local": "workspace:*",
+    "@verity-board/providers-model-mock": "workspace:*",
+    "@verity-board/providers-model-anthropic": "workspace:*",
+    "@verity-board/providers-model-openai": "workspace:*",
+    "@verity-board/providers-model-gemini": "workspace:*",
+    "@verity-board/reporters": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  }
+}

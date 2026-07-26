@@ -1,0 +1,7 @@
+{
+  "attempted": true,
+  "succeeded": false,
+  "failedStep": "db_migration_reversal",
+  "environment": "staging",
+  "notes": "The saved_payment_methods migration could not be cleanly reversed in the staging rollback drill; the reversal script left an orphaned foreign-key constraint."
+}

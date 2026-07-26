@@ -1,0 +1,34 @@
+id: checkout-release-8.4
+title: Checkout Platform Release 8.4
+description: >
+  Release 8.4 of the checkout service: adds saved-payment-method support and
+  migrates the order database to a larger instance class. Includes a schema
+  migration for the new saved-payment-method table.
+
+application:
+  id: checkout-service
+  name: Checkout Service
+  tier: critical
+
+riskClassification: high
+
+submittedArtifacts:
+  - architecture.md
+  - product-requirements.md
+  - application.yaml
+
+evidenceReferences:
+  - test-results.json
+  - integration-test-results.json
+  - infrastructure-plan.json
+  - rollback-report.json
+  - telemetry-summary.json
+  - service-ownership.yaml
+
+requestingTeam: checkout-team
+
+humanDecisionOwner: Release Director
+
+attributes:
+  publicEndpoint: true
+  dataClassification: internal

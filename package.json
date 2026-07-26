@@ -1,0 +1,30 @@
+{
+  "name": "verity-board",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "An open-source, configurable, AI-assisted engineering review committee platform. Evidence from systems. Perspectives from specialized actors. Guardrails from policy. Accountability from humans.",
+  "license": "MIT",
+  "author": "Balajikumar Murugan",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ji-in-loop/verity-board.git"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter=./packages/* run build",
+    "test": "pnpm -r --filter=./packages/* run test",
+    "lint": "eslint .",
+    "typecheck": "pnpm -r --filter=./packages/* run typecheck",
+    "review:checkout-release": "pnpm --filter @verity-board/cli run start -- review --committee production-readiness --case examples/production-readiness/checkout-release"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.15.0",
+    "eslint": "^9.15.0",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.15.0",
+    "vitest": "^2.1.4"
+  }
+}

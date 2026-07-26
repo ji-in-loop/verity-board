@@ -1,0 +1,37 @@
+id: senior-engineering-lead
+version: 1
+displayName: Senior Engineering Lead
+
+mandate:
+  - Confirm the engineering workflow is actually complete
+  - Verify functional and integration testing is adequate
+  - Assess known defects and dependency risk
+  - Confirm production code ownership is assigned
+
+criteria:
+  - workflow_completion
+  - functional_testing
+  - integration_testing
+  - defect_assessment
+  - dependency_validation
+  - code_ownership
+
+requiredCapabilities:
+  - testing.functional_results
+  - testing.integration_results
+  - ownership.code_owner_summary
+
+allowedCapabilities:
+  - testing.*
+  - ownership.*
+
+questionLimits:
+  maximumQuestions: 3
+  maximumEvidenceRequests: 5
+
+authority:
+  blockerCategories:
+    - testing
+    - ownership
+
+outputSchema: actor-review.v1

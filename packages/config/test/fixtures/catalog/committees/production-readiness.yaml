@@ -1,0 +1,31 @@
+id: production-readiness
+version: 1
+
+actors:
+  required:
+    - senior-engineering-lead
+    - sre-reviewer
+    - solution-architect
+    - product-manager
+  conditional:
+    - actor: security-architect
+      when:
+        any:
+          - expr: "case.publicEndpoint == true"
+          - expr: "case.dataClassification == 'restricted'"
+
+execution:
+  mode: parallel
+  maximumReviewRounds: 2
+  maximumClarificationRounds: 1
+  maximumQuestionsPerActor: 3
+  maximumEvidenceRequests: 20
+  stopWhenNoNewEvidence: true
+  stopWhenMandatoryBlockerFound: true
+  stopWhenAllActorsFinal: true
+
+decisionPolicy: production-readiness-policy
+
+humanApproval:
+  required: true
+  decisionOwnerField: humanDecisionOwner

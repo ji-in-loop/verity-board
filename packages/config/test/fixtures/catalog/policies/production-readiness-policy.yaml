@@ -1,0 +1,20 @@
+id: production-readiness-policy
+version: 1
+criticalBlockers:
+  - testing.mandatory_suite_failed
+  - reliability.rollback_unverified
+  - security.critical_finding
+  - ownership.production_owner_missing
+rules:
+  - when: { expr: "criticalBlockers.count > 0" }
+    result: NO_GO
+  - when: { expr: "disagreements.critical.count > 0" }
+    result: ESCALATE
+  - when: { expr: "materialRisks.count > 0" }
+    result: CONDITIONAL_GO
+  - when:
+      all:
+        - expr: "criticalBlockers.count == 0"
+        - expr: "mandatoryEvidence.missing == 0"
+    result: GO
+defaultOutcome: ESCALATE

@@ -1,0 +1,76 @@
+evidence:
+  - capability: testing.functional_results
+    subject: checkout-service
+    status: VERIFIED
+    summary: "All 482 unit tests passed for checkout-service release 8.4."
+    file: test-results.json
+    classification: internal
+
+  - capability: testing.integration_results
+    subject: checkout-service
+    status: VERIFIED
+    summary: "All 96 integration tests passed, including functional coverage of the new payments-service lookup call."
+    file: integration-test-results.json
+    classification: internal
+
+  - capability: ownership.code_owner_summary
+    subject: checkout-service
+    status: VERIFIED
+    summary: "Production owner and on-call rotation are assigned (checkout-team, PagerDuty)."
+    file: service-ownership.yaml
+    classification: internal
+
+  - capability: telemetry.slo_status
+    subject: checkout-service
+    status: VERIFIED
+    summary: "Error budget is within range (62% remaining); alerting and dashboards are configured."
+    file: telemetry-summary.json
+    classification: internal
+
+  - capability: infrastructure.change_summary
+    subject: checkout-service
+    status: VERIFIED
+    summary: "Database instance migration and a schema migration are planned for this release."
+    file: infrastructure-plan.json
+    classification: internal
+
+  - capability: deployment.rollback_validation
+    subject: checkout-service
+    status: CONTRADICTED
+    summary: "Rollback validation failed in staging at the database migration reversal step."
+    file: rollback-report.json
+    classification: internal
+
+  - capability: architecture.design_summary
+    subject: checkout-service
+    status: VERIFIED
+    summary: "No public API contract changes; one new synchronous call to payments-service is introduced in the checkout path."
+    file: architecture.md
+    classification: internal
+
+  - capability: cost.estimate_comparison
+    subject: checkout-service
+    status: CONTRADICTED
+    summary: "Monthly infrastructure cost increases by $1,100 due to the database instance migration, and the variance is not yet approved."
+    file: infrastructure-plan.json
+    classification: internal
+
+  - capability: product.acceptance_criteria
+    subject: checkout-service
+    status: VERIFIED
+    summary: "All stated acceptance criteria are met; guest checkout is unaffected."
+    file: product-requirements.md
+    classification: internal
+
+  - capability: product.known_limitations
+    subject: checkout-service
+    status: VERIFIED
+    summary: "One card per customer in this release; multi-card support deferred to a future release. Not a blocker."
+    file: product-requirements.md
+    classification: internal
+
+  # testing.performance_results (dependent-service load test for payments-service)
+  # is intentionally NOT mapped here: no load test covering the new
+  # payments-service call pattern was supplied for this release, and the
+  # local evidence provider must report that as MISSING rather than silently
+  # treating the gap as a pass.

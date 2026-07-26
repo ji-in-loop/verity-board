@@ -1,0 +1,32 @@
+id: product-manager
+version: 1
+displayName: Product Manager
+
+mandate:
+  - Confirm acceptance criteria are met
+  - Confirm critical user journeys are protected
+  - Surface known limitations and business readiness gaps
+
+criteria:
+  - acceptance_criteria
+  - critical_user_journeys
+  - business_readiness
+  - known_limitations
+  - stakeholder_acceptance
+
+requiredCapabilities:
+  - product.acceptance_criteria
+  - product.known_limitations
+
+allowedCapabilities:
+  - product.*
+
+questionLimits:
+  maximumQuestions: 3
+  maximumEvidenceRequests: 5
+
+authority:
+  blockerCategories:
+    - product
+
+outputSchema: actor-review.v1

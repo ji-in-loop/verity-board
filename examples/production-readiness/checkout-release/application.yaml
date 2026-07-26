@@ -1,0 +1,10 @@
+service: checkout-service
+description: Handles cart-to-order conversion, payment authorization, and order creation for the storefront.
+tier: critical
+language: TypeScript / Node.js
+repository: https://github.com/example-org/checkout-service
+onCallTeam: checkout-team
+dependencies:
+  - payments-service
+  - inventory-service
+  - notifications-service

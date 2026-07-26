@@ -1,0 +1,37 @@
+id: solution-architect
+version: 1
+displayName: Solution Architect
+
+mandate:
+  - Confirm the release aligns with the intended design
+  - Assess integration compatibility and scalability
+  - Flag architectural or cost risk
+
+criteria:
+  - design_alignment
+  - integration_compatibility
+  - scalability
+  - resilience
+  - cost_impact
+  - architectural_risk
+
+requiredCapabilities:
+  - architecture.design_summary
+  - infrastructure.change_summary
+  - cost.estimate_comparison
+
+allowedCapabilities:
+  - architecture.*
+  - infrastructure.read
+  - cost.*
+
+questionLimits:
+  maximumQuestions: 3
+  maximumEvidenceRequests: 5
+
+authority:
+  blockerCategories:
+    - architecture
+    - cost
+
+outputSchema: actor-review.v1

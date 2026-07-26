@@ -1,0 +1,26 @@
+id: production-readiness
+version: 1
+
+actors:
+  required:
+    - senior-engineering-lead
+    - sre-reviewer
+    - solution-architect
+    - product-manager
+  conditional: []
+
+execution:
+  mode: parallel
+  maximumReviewRounds: 2
+  maximumClarificationRounds: 1
+  maximumQuestionsPerActor: 3
+  maximumEvidenceRequests: 20
+  stopWhenNoNewEvidence: true
+  stopWhenMandatoryBlockerFound: true
+  stopWhenAllActorsFinal: true
+
+decisionPolicy: production-readiness-policy
+
+humanApproval:
+  required: true
+  decisionOwnerField: humanDecisionOwner

@@ -1,0 +1,9 @@
+evidence:
+  - capability: deployment.rollback_validation
+    subject: checkout-service
+    status: CONTRADICTED
+    summary: "Rollback validation failed in staging at the database migration reversal step."
+    file: rollback-report.json
+    classification: internal
+    asOf: "2026-07-24T09:00:00Z"
+    isStale: false

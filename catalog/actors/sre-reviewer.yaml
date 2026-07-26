@@ -1,0 +1,40 @@
+id: sre-reviewer
+version: 1
+displayName: Site Reliability Engineer
+
+mandate:
+  - Assess operational readiness
+  - Identify reliability blockers
+  - Validate recovery readiness
+
+criteria:
+  - availability
+  - observability
+  - capacity
+  - rollback
+  - disaster_recovery
+  - support_ownership
+
+requiredCapabilities:
+  - telemetry.slo_status
+  - infrastructure.change_summary
+  - testing.performance_results
+  - deployment.rollback_validation
+
+allowedCapabilities:
+  - telemetry.*
+  - infrastructure.read
+  - testing.read
+  - deployment.read
+
+questionLimits:
+  maximumQuestions: 3
+  maximumEvidenceRequests: 5
+
+authority:
+  blockerCategories:
+    - reliability
+    - rollback
+    - disaster_recovery
+
+outputSchema: actor-review.v1

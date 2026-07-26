@@ -1,0 +1,29 @@
+id: production-readiness-playbook
+version: 1
+
+reviewTask: production-readiness
+
+inputRequirements:
+  - application
+  - riskClassification
+  - evidenceReferences
+  - humanDecisionOwner
+
+applicableCommittees:
+  - production-readiness
+
+outcomeVocabulary:
+  - GO
+  - CONDITIONAL_GO
+  - NO_GO
+  - ESCALATE
+
+mandatoryControls:
+  - testing.mandatory_suite_failed
+  - reliability.rollback_unverified
+
+decisionRules: production-readiness-policy
+
+reportFormat:
+  - json
+  - markdown

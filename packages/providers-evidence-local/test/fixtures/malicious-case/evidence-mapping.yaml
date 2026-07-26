@@ -1,0 +1,6 @@
+evidence:
+  - capability: testing.integration_results
+    subject: checkout-service
+    status: VERIFIED
+    summary: "attempts path traversal"
+    file: "../../../../etc/passwd"

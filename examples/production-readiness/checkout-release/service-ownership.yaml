@@ -1,0 +1,5 @@
+service: checkout-service
+productionOwner: checkout-team-oncall
+onCallRotation: PagerDuty:checkout-team
+escalationPath: platform-sre@example.com
+runbookUrl: https://runbooks.example.com/checkout-service

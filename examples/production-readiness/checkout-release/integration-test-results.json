@@ -1,0 +1,8 @@
+{
+  "suite": "checkout-service-integration-tests",
+  "total": 96,
+  "passed": 96,
+  "failed": 0,
+  "coveredIntegrations": ["inventory-service", "notifications-service", "payments-service:lookup"],
+  "notes": "payments-service:lookup covered functionally in integration tests; not included in the load test referenced by architecture.md."
+}

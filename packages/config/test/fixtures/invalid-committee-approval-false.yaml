@@ -1,0 +1,10 @@
+id: production-readiness
+version: 1
+actors:
+  required: [sre-reviewer]
+  conditional: []
+execution: {}
+decisionPolicy: production-readiness-policy
+humanApproval:
+  required: false
+  decisionOwnerField: humanDecisionOwner

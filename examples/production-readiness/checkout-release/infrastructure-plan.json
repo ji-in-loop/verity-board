@@ -1,0 +1,13 @@
+{
+  "changeSummary": "Migrate order database from db.r6g.large to db.r6g.xlarge; add saved_payment_methods schema migration.",
+  "instanceChange": {
+    "from": "db.r6g.large",
+    "to": "db.r6g.xlarge"
+  },
+  "costImpact": {
+    "priorMonthlyUsd": 3100,
+    "newMonthlyUsd": 4200,
+    "varianceUsd": 1100,
+    "varianceApproved": false
+  }
+}
