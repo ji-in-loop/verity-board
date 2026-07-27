@@ -4,6 +4,7 @@ import { FindingSchema } from '../src/schemas/finding.js';
 import { ActorSkillSchema } from '../src/schemas/actor-skill.js';
 import { CommitteeSchema } from '../src/schemas/committee.js';
 import { DecisionPolicySchema } from '../src/schemas/decision-policy.js';
+import { ReviewCaseSchema } from '../src/schemas/review-case.js';
 import { ActorReviewSchema, blockersOf, risksOf } from '../src/schemas/actor-review.js';
 import { HumanApprovalSchema } from '../src/schemas/human-approval.js';
 import { PlaybookSchema } from '../src/schemas/playbook.js';
@@ -140,6 +141,46 @@ describe('DecisionPolicySchema', () => {
         rules: [],
       }),
     ).toThrow();
+  });
+});
+
+describe('ReviewCaseSchema', () => {
+  const valid = {
+    id: 'checkout-release-8.4',
+    title: 'Checkout Platform Release 8.4',
+    application: { id: 'checkout-service', name: 'Checkout Service' },
+    riskClassification: 'high',
+    requestingTeam: 'Checkout Platform',
+    humanDecisionOwner: 'Release Director',
+  };
+
+  it('accepts a well-formed review case and defaults the optional collections', () => {
+    const parsed = ReviewCaseSchema.parse(valid);
+    expect(parsed.description).toBe('');
+    expect(parsed.submittedArtifacts).toEqual([]);
+    expect(parsed.evidenceReferences).toEqual([]);
+    expect(parsed.attributes).toEqual({});
+  });
+
+  it('accepts free-form attributes used by conditional-actor rules', () => {
+    const parsed = ReviewCaseSchema.parse({
+      ...valid,
+      attributes: { publicEndpoint: true, dataClassification: 'restricted' },
+    });
+    expect(parsed.attributes).toEqual({ publicEndpoint: true, dataClassification: 'restricted' });
+  });
+
+  it('rejects an unknown riskClassification value', () => {
+    expect(() => ReviewCaseSchema.parse({ ...valid, riskClassification: 'severe' })).toThrow();
+  });
+
+  it('rejects a missing humanDecisionOwner', () => {
+    const { humanDecisionOwner: _humanDecisionOwner, ...withoutOwner } = valid;
+    expect(() => ReviewCaseSchema.parse(withoutOwner)).toThrow();
+  });
+
+  it('rejects an application block missing its own id/name', () => {
+    expect(() => ReviewCaseSchema.parse({ ...valid, application: { foo: 'bar' } })).toThrow();
   });
 });
 

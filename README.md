@@ -184,7 +184,7 @@ pnpm run test:coverage   # same tests, with v8 coverage + lcov output per packag
 pnpm lint
 ```
 
-144 tests across 11 packages, zero network calls, zero live model calls by
+161 tests across 11 packages, zero network calls, zero live model calls by
 default. Each real-model adapter also ships one contract test gated behind
 `VERITY_BOARD_LIVE_MODEL_TESTS=1` (skipped otherwise) that hits its vendor's
 live API — run it yourself with the relevant API key set to verify a new

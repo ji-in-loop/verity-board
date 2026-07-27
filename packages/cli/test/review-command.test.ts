@@ -1,4 +1,4 @@
-import { cpSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, rmSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -56,6 +56,57 @@ describe('runReviewCommand', () => {
     await expect(runReviewCommand(baseArgs({ model: 'bogus-provider' }))).rejects.toThrow(
       ReviewCommandError,
     );
+  });
+
+  it('throws ReviewCommandError when the committee references a policy missing from the catalog', async () => {
+    const scratchCatalogDir = mkdtempSync(join(tmpdir(), 'verity-board-cli-unit-catalog-'));
+    cpSync(catalogDir, scratchCatalogDir, { recursive: true });
+    unlinkSync(join(scratchCatalogDir, 'policies', 'production-readiness-policy.yaml'));
+
+    try {
+      await expect(
+        runReviewCommand(baseArgs({ catalog: scratchCatalogDir })),
+      ).rejects.toThrow(/references unknown policy/i);
+    } finally {
+      rmSync(scratchCatalogDir, { recursive: true, force: true });
+    }
+  });
+
+  it('throws ReviewCommandError when the committee references an actor missing from the catalog', async () => {
+    const scratchCatalogDir = mkdtempSync(join(tmpdir(), 'verity-board-cli-unit-catalog-'));
+    cpSync(catalogDir, scratchCatalogDir, { recursive: true });
+    unlinkSync(join(scratchCatalogDir, 'actors', 'product-manager.yaml'));
+
+    try {
+      await expect(
+        runReviewCommand(baseArgs({ catalog: scratchCatalogDir })),
+      ).rejects.toThrow(/references unknown actor/i);
+    } finally {
+      rmSync(scratchCatalogDir, { recursive: true, force: true });
+    }
+  });
+
+  it('lets a model-provider construction error other than the two known ones propagate raw', async () => {
+    // The openai SDK throws its own error at construction time when no API
+    // key is available anywhere — that error isn't UnknownModelProviderError
+    // or MockFixturesUnavailableError, so runReviewCommand must let it
+    // through unwrapped rather than swallowing it into a ReviewCommandError.
+    const previousOpenAiKey = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+
+    try {
+      let caught: unknown;
+      try {
+        await runReviewCommand(baseArgs({ model: 'openai' }));
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(Error);
+      expect(caught).not.toBeInstanceOf(ReviewCommandError);
+    } finally {
+      if (previousOpenAiKey === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = previousOpenAiKey;
+    }
   });
 
   it('defaults outDir to <case>/reports when --out is not given', async () => {
